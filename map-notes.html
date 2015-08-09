@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+
+    <script src="/socket.io/socket.io.js"></script>
+
+    <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.3/leaflet.css" />
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.3/leaflet.js"></script>
+
+    <style type="text/css">
+        html {
+            height: 100%;
+        }
+
+        body {
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+
+        #map {
+            min-height: 100%;
+        }
+
+        .ui-widget {
+            font-size: 15px; /* Or whatever smaller value works for you. */
+        }
+    </style>
+
+    <script>
+        function ready(fn) {
+            if (document.readyState != 'loading') {
+                fn();
+            } else {
+                document.addEventListener('DOMContentLoaded', fn);
+            }
+        }
+
+        function getMouseCoordinates(e) {
+            var posx = 0;
+            var posy = 0;
+            if (!e) var e = window.event;
+            if (e.pageX || e.pageY) {
+                posx = e.pageX;
+                posy = e.pageY;
+            } else if (e.clientX || e.clientY) {
+                posx = e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
+                posy = e.clientY + document.body.scrollTop + document.documentElement.scrollTop;
+            }
+            // posx and posy contain the mouse position relative to the document
+            // Do something with this information
+
+            return {
+                posx: posx,
+                posy: posy
+            };
+        }
+    </script>
+
+    <script type="text/javascript">
+        var socket = io.connect();
+
+        ready(function () {
+            var map = L.map('map');
+
+            var popup = L.popup(),
+                    marker = function (e) {
+                        return L.marker(e.latlng, {
+                            draggable: true,
+                            keyboard: true
+                        });
+                    },
+                    addMarker = function(note)
+                    {
+                        marker(note).bindPopup(note.note).addTo(map).openPopup();
+                    };
+
+            L.tileLayer("http://{s}tile.stamen.com/toner-lite/{z}/{x}/{y}.png", {
+                minZoom: 0,
+                maxZoom: 20,
+                subdomains: ["a.", "b.", "c.", "d."],
+                scheme: "xyz",
+                attribution: "Map tiles by <a href=\"http://stamen.com/\">Stamen Design</a>, under <a href=\"http://creativecommons.org/licenses/by/3.0\">CC BY 3.0</a>. Data by <a href=\"http://openstreetmap.org\">OpenStreetMap</a>, under <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>.",
+                sa_id: "toner-lite"
+            }).addTo(map);
+
+            //Get Markers
+            var request = new XMLHttpRequest();
+            request.open('GET', '/getMarkers', true);
+            request.setRequestHeader('Content-Type', 'X-Requested-With');
+            request.onload = function() {
+                if (request.status >= 200 && request.status < 400) {
+                    // Success!
+                    var mapNotes = JSON.parse(request.responseText);
+
+                    var mapNotesLength = mapNotes.length;
+                    while(mapNotesLength--)
+                    {
+                        addMarker(mapNotes[mapNotesLength])
+                    }
+                } else {
+                    // We reached our target server, but it returned an error
+
+                }
+            };
+            request.onerror = function() {
+                // There was a connection error of some sort
+            };
+            request.send();
+//
+
+            //Realtime Updates
+            socket.on('note', function (mapNote) {
+                    addMarker(mapNote);
+            });
+
+            map.locate({
+                setView: true,
+                maxZoom: 10
+            });
+
+            map.on('click', function (ev) {
+
+                $($('#CreateMarkerDialog').html()).dialog({
+//                    height: 300,
+//                    width: 350,
+                    modal: true,
+                    close: function () {
+                        $(this).dialog('destroy');
+                    },
+                    buttons: {
+                        "Add marker": function () {
+                            var note = $('#Text', this).val();
+
+                            socket.emit('note', {note: note, latlng: {lat: ev.latlng.lat, lng: ev.latlng.lng }});
+
+//                            var request = new XMLHttpRequest();
+//                            request.open('POST', '/addNote', true);
+//                            request.setRequestHeader('Content-Type', 'X-Requested-With');
+//
+//                            request.onload = function() {
+//                                if (request.status >= 200 && request.status < 400) {
+//                                    // Success!
+//                                    var resp = request.responseText;
+//var json = JSON.parse(resp);
+//                                    marker({latlng: [json.x, json.y]}).bindPopup(json.note).addTo(map).openPopup();
+//                                } else {
+//                                    // We reached our target server, but it returned an error
+//
+//                                }
+//                            };
+//                            request.onerror = function() {
+//                                // There was a connection error of some sort
+//                            };
+//                            request.send({note: note, x: ev.latlng[0], y: ev.latlng[1] });
+
+                            $(this).dialog("close");
+                        },
+                        Cancel: function () {
+                            $(this).dialog("close");
+                        }
+                    }
+                });
+
+
+                /*                marker(e).bindPopup("You clicked the map at " + e.latlng.toString() + "<br/>").addTo(map).openPopup();*/
+
+                //                popup.setLatLng(e.latlng)
+                //                    .setContent("You clicked the map at " + e.latlng.toString())
+                //                    .openOn(map);
+            });
+
+            function onLocationFound(e) {
+                L.marker(e.latlng).addTo(map).bindPopup("You are within " + e.accuracy + " meters from this point").openPopup();
+            }
+            map.on('locationfound', onLocationFound);
+
+            function onLocationError(e) {
+                alert(e.message);
+            }
+            map.on('locationerror', onLocationError);
+        });
+    </script>
+    <script id="CreateMarkerDialog" type="text/template">
+        <div class="dialog-form" id="" title="Create Marker">
+            <form>
+                <label for="Text">Text:</label>
+                <input type="text" name="Text" id="Text"/>
+            </form>
+        </div>
+    </script>
+</head>
+
+<body>
+<div id="map"></div>
+</body>
+
+</html>

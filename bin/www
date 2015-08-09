@@ -18,9 +18,16 @@ app.set('port', port);
 /**
  * Create HTTP server.
  */
+var notes = global.notes = [];
 
 var server = http.createServer(app);
-
+var io = require('socket.io')(server);
+io.sockets.on('connection', function (socket) {
+  socket.on('note', function (note) {
+    notes.push(note);
+    io.sockets.emit('note', note);
+  });
+});
 /**
  * Listen on provided port, on all network interfaces.
  */
